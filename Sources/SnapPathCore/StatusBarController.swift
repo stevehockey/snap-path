@@ -1,13 +1,15 @@
 import AppKit
 
-public class StatusBarController {
+public class StatusBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
     private let captureService = ScreenCaptureService()
     private let preferences = PreferencesManager()
     private let clipboard = ClipboardService()
+    private var recentSubMenu: NSMenu?
 
-    public init() {
+    public override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        super.init()
         setupButton()
         setupMenu()
     }
@@ -50,6 +52,16 @@ public class StatusBarController {
 
         menu.addItem(NSMenuItem.separator())
 
+        let recentItem = NSMenuItem(title: "Recent", action: nil, keyEquivalent: "")
+        let recentMenu = NSMenu()
+        recentMenu.addItem(NSMenuItem(title: "No recent captures", action: nil, keyEquivalent: ""))
+        recentMenu.item(at: 0)?.isEnabled = false
+        recentItem.submenu = recentMenu
+        recentSubMenu = recentMenu
+        menu.addItem(recentItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let dirDisplay = NSMenuItem(
             title: "Save to: \(preferences.saveDirectoryDisplay)",
             action: nil,
@@ -84,7 +96,66 @@ public class StatusBarController {
         quit.target = self
         menu.addItem(quit)
 
+        menu.delegate = self
         statusItem.menu = menu
+    }
+
+    // MARK: - NSMenuDelegate
+
+    public func menuWillOpen(_ menu: NSMenu) {
+        refreshRecentCaptures()
+    }
+
+    private func refreshRecentCaptures() {
+        guard let recentMenu = recentSubMenu else { return }
+        recentMenu.removeAllItems()
+
+        let directory = preferences.saveDirectory
+        let fm = FileManager.default
+        guard let contents = try? fm.contentsOfDirectory(
+            at: URL(fileURLWithPath: directory),
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: .skipsHiddenFiles
+        ) else {
+            let empty = NSMenuItem(title: "No recent captures", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            recentMenu.addItem(empty)
+            return
+        }
+
+        let images = contents
+            .filter { ["png", "jpg", "jpeg", "tiff", "gif"].contains($0.pathExtension.lowercased()) }
+            .compactMap { url -> (URL, Date)? in
+                let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+                return date.map { (url, $0) }
+            }
+            .sorted { $0.1 > $1.1 }
+            .prefix(10)
+            .map { $0.0 }
+
+        guard !images.isEmpty else {
+            let empty = NSMenuItem(title: "No recent captures", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            recentMenu.addItem(empty)
+            return
+        }
+
+        for url in images {
+            let item = NSMenuItem(
+                title: url.lastPathComponent,
+                action: #selector(copyRecentPath(_:)),
+                keyEquivalent: ""
+            )
+            item.target = self
+            item.representedObject = url.path
+            recentMenu.addItem(item)
+        }
+    }
+
+    @objc private func copyRecentPath(_ sender: NSMenuItem) {
+        guard let path = sender.representedObject as? String else { return }
+        clipboard.copyToClipboard(path)
+        showNotification(path: path)
     }
 
     // MARK: - Actions
