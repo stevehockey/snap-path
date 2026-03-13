@@ -66,6 +66,14 @@ public class StatusBarController {
         changeDir.target = self
         menu.addItem(changeDir)
 
+        let openFolder = NSMenuItem(
+            title: "Open Save Folder",
+            action: #selector(openSaveFolder),
+            keyEquivalent: "f"
+        )
+        openFolder.target = self
+        menu.addItem(openFolder)
+
         menu.addItem(NSMenuItem.separator())
 
         let quit = NSMenuItem(
@@ -111,6 +119,12 @@ public class StatusBarController {
     private func showNotification(path: String) {
         let filename = (path as NSString).lastPathComponent
         NSLog("SnapPath: Saved \(filename) — path copied to clipboard")
+    }
+
+    /// Opens the configured save directory in Finder via NSWorkspace.
+    @objc private func openSaveFolder() {
+        let url = URL(fileURLWithPath: preferences.saveDirectory)
+        NSWorkspace.shared.open(url)
     }
 
     @objc private func changeSaveDirectory() {
