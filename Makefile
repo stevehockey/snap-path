@@ -69,6 +69,16 @@ uninstall:                          ## Remove app from /Applications
 test:                               ## Run the full test suite
 	swift test
 
+.PHONY: lint
+lint:                               ## Check for compile errors (swift build)
+	swift build
+
+.PHONY: check
+check: lint test                    ## Full local check: build + test
+
+.PHONY: check-full
+check-full: check                   ## Full check including integration tests (same as check for now)
+
 # ─── Clean ────────────────────────────────────────────────────────────────────
 
 .PHONY: clean
