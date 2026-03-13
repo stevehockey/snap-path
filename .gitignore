@@ -1,0 +1,30 @@
+# Swift Package Manager build artifacts
+.build/
+
+# macOS metadata
+.DS_Store
+._*
+
+# Xcode derived data and user state
+DerivedData/
+*.xcuserstate
+xcuserdata/
+.xcworkspace/xcuserdata/
+
+# Compiled objects
+*.o
+*.d
+
+# Editor temp files
+*.swp
+*.swo
+*~
+
+# Build output bundles
+*.app
+
+# Local tool config
+.claude/
+
+# Session handover doc
+handover.md
