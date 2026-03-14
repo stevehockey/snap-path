@@ -10,6 +10,7 @@ public class StatusBarController: NSObject, NSMenuDelegate {
     private var recentSubMenu: NSMenu?
     private var lastCapturedPath: String?
     private weak var showLastCaptureItem: NSMenuItem?
+    private var preferencesWindowController: PreferencesWindowController?
 
     public override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -85,7 +86,7 @@ public class StatusBarController: NSObject, NSMenuDelegate {
         let changeDir = NSMenuItem(
             title: "Change Save Directory\u{2026}",
             action: #selector(changeSaveDirectory),
-            keyEquivalent: ","
+            keyEquivalent: ""
         )
         changeDir.target = self
         menu.addItem(changeDir)
@@ -107,6 +108,16 @@ public class StatusBarController: NSObject, NSMenuDelegate {
         showLast.isEnabled = lastCapturedPath != nil
         menu.addItem(showLast)
         showLastCaptureItem = showLast
+
+        menu.addItem(NSMenuItem.separator())
+
+        let prefsItem = NSMenuItem(
+            title: "Preferences\u{2026}",
+            action: #selector(openPreferences),
+            keyEquivalent: ","
+        )
+        prefsItem.target = self
+        menu.addItem(prefsItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -176,7 +187,8 @@ public class StatusBarController: NSObject, NSMenuDelegate {
 
     @objc private func copyRecentPath(_ sender: NSMenuItem) {
         guard let path = sender.representedObject as? String else { return }
-        clipboard.copyToClipboard(path)
+        let formatted = clipboard.formatPath(path, format: preferences.pathFormat)
+        clipboard.copyToClipboard(formatted)
         showNotification(path: path)
     }
 
@@ -196,17 +208,31 @@ public class StatusBarController: NSObject, NSMenuDelegate {
 
     private func performCapture(mode: ScreenCaptureService.CaptureMode) {
         let saveDir = preferences.saveDirectory
+        let prefix = preferences.filenamePrefix
+        let muted = !preferences.playSound
+        let format = preferences.pathFormat
+        let shouldAutoOpen = preferences.autoOpenPicker
 
         // Run capture on background thread to avoid blocking the main thread
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let filePath = self?.captureService.capture(mode: mode, directory: saveDir)
+            let filePath = self?.captureService.capture(
+                mode: mode,
+                directory: saveDir,
+                prefix: prefix,
+                muted: muted
+            )
 
             DispatchQueue.main.async {
                 guard let self = self, let path = filePath else { return }
-                self.clipboard.copyToClipboard(path)
+                let formatted = self.clipboard.formatPath(path, format: format)
+                self.clipboard.copyToClipboard(formatted)
                 self.lastCapturedPath = path
                 self.showLastCaptureItem?.isEnabled = true
                 self.showNotification(path: path)
+
+                if shouldAutoOpen {
+                    self.copyPaths()
+                }
             }
         }
     }
@@ -269,7 +295,7 @@ public class StatusBarController: NSObject, NSMenuDelegate {
             DispatchQueue.main.async {
                 guard let self = self, response == .OK, !panel.urls.isEmpty else { return }
                 let paths = panel.urls.map { $0.path }
-                self.clipboard.copyPathsToClipboard(paths)
+                self.clipboard.copyPathsToClipboard(paths, format: self.preferences.pathFormat)
                 let count = paths.count
                 if count == 1 {
                     self.showNotification(path: paths[0])
@@ -296,6 +322,15 @@ public class StatusBarController: NSObject, NSMenuDelegate {
         preferences.promptForSaveDirectory { [weak self] in
             self?.setupMenu()
         }
+    }
+
+    @objc private func openPreferences() {
+        if preferencesWindowController == nil {
+            preferencesWindowController = PreferencesWindowController(preferences: preferences)
+        }
+        NSApp.activate(ignoringOtherApps: true)
+        preferencesWindowController?.showWindow(nil)
+        preferencesWindowController?.window?.makeKeyAndOrderFront(nil)
     }
 
     @objc private func quitApp() {
