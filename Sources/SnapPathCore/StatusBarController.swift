@@ -1,4 +1,5 @@
 import AppKit
+import UniformTypeIdentifiers
 
 public class StatusBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
@@ -51,6 +52,14 @@ public class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(selection)
 
         menu.addItem(NSMenuItem.separator())
+
+        let copyPaths = NSMenuItem(
+            title: "Copy Paths\u{2026}",
+            action: #selector(copyPaths),
+            keyEquivalent: "o"
+        )
+        copyPaths.target = self
+        menu.addItem(copyPaths)
 
         let recentItem = NSMenuItem(title: "Recent", action: nil, keyEquivalent: "")
         let recentMenu = NSMenu()
@@ -189,7 +198,40 @@ public class StatusBarController: NSObject, NSMenuDelegate {
 
     private func showNotification(path: String) {
         let filename = (path as NSString).lastPathComponent
-        NSLog("SnapPath: Saved \(filename) — path copied to clipboard")
+        showNotification(message: "Saved \(filename) — path copied to clipboard")
+    }
+
+    /// Displays a general notification message via NSLog.
+    private func showNotification(message: String) {
+        NSLog("SnapPath: \(message)")
+    }
+
+    /// Opens NSOpenPanel for multi-selecting image files, then copies
+    /// all selected paths to the clipboard (one per line).
+    @objc private func copyPaths() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = [.png, .jpeg, .tiff, .gif, .bmp]
+        panel.message = "Select screenshots to copy paths"
+        panel.prompt = "Copy Paths"
+        panel.directoryURL = URL(fileURLWithPath: preferences.saveDirectory)
+
+        NSApp.activate(ignoringOtherApps: true)
+        panel.begin { [weak self] response in
+            DispatchQueue.main.async {
+                guard let self = self, response == .OK, !panel.urls.isEmpty else { return }
+                let paths = panel.urls.map { $0.path }
+                self.clipboard.copyPathsToClipboard(paths)
+                let count = paths.count
+                if count == 1 {
+                    self.showNotification(path: paths[0])
+                } else {
+                    self.showNotification(message: "\(count) paths copied to clipboard")
+                }
+            }
+        }
     }
 
     /// Opens the configured save directory in Finder via NSWorkspace.

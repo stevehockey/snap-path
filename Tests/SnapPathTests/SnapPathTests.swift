@@ -45,7 +45,19 @@ final class SnapPathTests: XCTestCase {
 
     // MARK: - ClipboardService
 
-    func testCopyToClipboard() {
+    /// Helper: checks whether NSPasteboard is functional in this environment.
+    /// Headless test runners (swift test without a GUI session) return nil for all reads.
+    private func pasteboardIsAvailable() -> Bool {
+        let pb = NSPasteboard.general
+        pb.clearContents()
+        pb.setString("__probe__", forType: .string)
+        let ok = pb.string(forType: .string) == "__probe__"
+        pb.clearContents()
+        return ok
+    }
+
+    func testCopyToClipboard() throws {
+        try XCTSkipUnless(pasteboardIsAvailable(), "NSPasteboard unavailable in headless environment")
         let clipboard = ClipboardService()
         let testPath = "/tmp/Screenshot_test_\(UUID().uuidString).png"
 
@@ -53,5 +65,37 @@ final class SnapPathTests: XCTestCase {
 
         let result = NSPasteboard.general.string(forType: .string)
         XCTAssertEqual(result, testPath)
+    }
+
+    func testFormatPathReturnsPlainPath() {
+        let clipboard = ClipboardService()
+        let path = "/Users/test/Pictures/Screenshot_2026-03-13.png"
+        XCTAssertEqual(clipboard.formatPath(path), path)
+    }
+
+    func testCopyPathsToClipboardSinglePath() throws {
+        try XCTSkipUnless(pasteboardIsAvailable(), "NSPasteboard unavailable in headless environment")
+        let clipboard = ClipboardService()
+        let path = "/tmp/single_\(UUID().uuidString).png"
+
+        clipboard.copyPathsToClipboard([path])
+
+        let result = NSPasteboard.general.string(forType: .string)
+        XCTAssertEqual(result, path)
+    }
+
+    func testCopyPathsToClipboardMultiplePaths() throws {
+        try XCTSkipUnless(pasteboardIsAvailable(), "NSPasteboard unavailable in headless environment")
+        let clipboard = ClipboardService()
+        let paths = [
+            "/tmp/a_\(UUID().uuidString).png",
+            "/tmp/b_\(UUID().uuidString).png",
+            "/tmp/c_\(UUID().uuidString).png"
+        ]
+
+        clipboard.copyPathsToClipboard(paths)
+
+        let result = NSPasteboard.general.string(forType: .string)
+        XCTAssertEqual(result, paths.joined(separator: "\n"))
     }
 }
