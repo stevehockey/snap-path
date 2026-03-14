@@ -1,4 +1,5 @@
 import AppKit
+import KeyboardShortcuts
 import UniformTypeIdentifiers
 import UserNotifications
 
@@ -17,6 +18,22 @@ public class StatusBarController: NSObject, NSMenuDelegate {
         super.init()
         setupButton()
         setupMenu()
+        registerGlobalShortcuts()
+    }
+
+    /// Registers global keyboard shortcut handlers for each capture mode.
+    /// Shortcuts use Carbon RegisterEventHotKey internally — no Accessibility
+    /// permission required. Bindings are configured by the user in Preferences.
+    private func registerGlobalShortcuts() {
+        KeyboardShortcuts.onKeyUp(for: .captureFullScreen) { [weak self] in
+            self?.performCapture(mode: .fullScreen)
+        }
+        KeyboardShortcuts.onKeyUp(for: .captureWindow) { [weak self] in
+            self?.performCapture(mode: .window)
+        }
+        KeyboardShortcuts.onKeyUp(for: .captureSelection) { [weak self] in
+            self?.performCapture(mode: .selection)
+        }
     }
 
     private func setupButton() {
