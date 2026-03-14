@@ -1,23 +1,39 @@
 import AppKit
+import KeyboardShortcuts
 
-/// Window controller for the General Preferences panel.
-/// Built programmatically (no XIBs). Presents a single-page layout
-/// that will be promoted to a tabbed interface when additional panes
-/// (e.g., Shortcuts) are added.
+/// Window controller for the Preferences panel.
+/// Uses NSTabViewController with toolbar-style tabs to present
+/// General settings and Keyboard Shortcuts configuration.
 public class PreferencesWindowController: NSWindowController {
     private let preferences: PreferencesManager
 
     public init(preferences: PreferencesManager) {
         self.preferences = preferences
-        let vc = PreferencesViewController(preferences: preferences)
+
+        let tabVC = NSTabViewController()
+        tabVC.tabStyle = .toolbar
+
+        let generalVC = GeneralPreferencesViewController(preferences: preferences)
+        let generalItem = NSTabViewItem(viewController: generalVC)
+        generalItem.label = "General"
+        generalItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: "General")
+
+        let shortcutsVC = ShortcutsViewController()
+        let shortcutsItem = NSTabViewItem(viewController: shortcutsVC)
+        shortcutsItem.label = "Shortcuts"
+        shortcutsItem.image = NSImage(systemSymbolName: "keyboard", accessibilityDescription: "Shortcuts")
+
+        tabVC.addTabViewItem(generalItem)
+        tabVC.addTabViewItem(shortcutsItem)
+
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 400, height: 280),
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 320),
             styleMask: [.titled, .closable],
             backing: .buffered,
             defer: false
         )
         window.title = "SnapPath Preferences"
-        window.contentViewController = vc
+        window.contentViewController = tabVC
         window.center()
         window.isReleasedWhenClosed = false
         super.init(window: window)
@@ -26,9 +42,11 @@ public class PreferencesWindowController: NSWindowController {
     required init?(coder: NSCoder) { fatalError("not implemented") }
 }
 
-// MARK: - PreferencesViewController
+// MARK: - GeneralPreferencesViewController
 
-private class PreferencesViewController: NSViewController {
+/// The General tab — save directory, clipboard format, filename prefix,
+/// capture sound toggle, and auto-open picker toggle.
+private class GeneralPreferencesViewController: NSViewController {
     private let preferences: PreferencesManager
 
     init(preferences: PreferencesManager) {
@@ -141,5 +159,56 @@ private class PreferencesViewController: NSViewController {
 
     @objc private func autoOpenToggled(_ sender: NSButton) {
         preferences.autoOpenPicker = sender.state == .on
+    }
+}
+
+// MARK: - ShortcutsViewController
+
+/// The Shortcuts tab — provides KeyboardShortcuts.RecorderCocoa rows for
+/// each capture mode so the user can configure global hotkeys.
+private class ShortcutsViewController: NSViewController {
+    override func loadView() {
+        view = NSView(frame: NSRect(x: 0, y: 0, width: 420, height: 220))
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        buildUI()
+    }
+
+    private func buildUI() {
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 16
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.topAnchor.constraint(equalTo: view.topAnchor, constant: 20),
+            stack.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
+            stack.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+        ])
+
+        stack.addArrangedSubview(shortcutRow(label: "Capture Full Screen:", name: .captureFullScreen))
+        stack.addArrangedSubview(shortcutRow(label: "Capture Window:", name: .captureWindow))
+        stack.addArrangedSubview(shortcutRow(label: "Capture Selection:", name: .captureSelection))
+
+        let note = NSTextField(wrappingLabelWithString: "Shortcuts work system-wide from any app.")
+        note.font = NSFont.systemFont(ofSize: 11)
+        note.textColor = .secondaryLabelColor
+        stack.addArrangedSubview(note)
+    }
+
+    /// Builds a horizontal row with a label and a shortcut recorder.
+    private func shortcutRow(label text: String, name: KeyboardShortcuts.Name) -> NSView {
+        let row = NSStackView()
+        row.orientation = .horizontal
+        row.spacing = 12
+        let label = NSTextField(labelWithString: text)
+        label.widthAnchor.constraint(equalToConstant: 160).isActive = true
+        let recorder = KeyboardShortcuts.RecorderCocoa(for: name)
+        row.addArrangedSubview(label)
+        row.addArrangedSubview(recorder)
+        return row
     }
 }
