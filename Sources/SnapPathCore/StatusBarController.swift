@@ -1,5 +1,6 @@
 import AppKit
 import UniformTypeIdentifiers
+import UserNotifications
 
 public class StatusBarController: NSObject, NSMenuDelegate {
     private let statusItem: NSStatusItem
@@ -7,6 +8,8 @@ public class StatusBarController: NSObject, NSMenuDelegate {
     private let preferences = PreferencesManager()
     private let clipboard = ClipboardService()
     private var recentSubMenu: NSMenu?
+    private var lastCapturedPath: String?
+    private weak var showLastCaptureItem: NSMenuItem?
 
     public override init() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -94,6 +97,16 @@ public class StatusBarController: NSObject, NSMenuDelegate {
         )
         openFolder.target = self
         menu.addItem(openFolder)
+
+        let showLast = NSMenuItem(
+            title: "Show Last Capture in Finder",
+            action: #selector(showLastCaptureInFinder),
+            keyEquivalent: "r"
+        )
+        showLast.target = self
+        showLast.isEnabled = lastCapturedPath != nil
+        menu.addItem(showLast)
+        showLastCaptureItem = showLast
 
         menu.addItem(NSMenuItem.separator())
 
@@ -191,19 +204,52 @@ public class StatusBarController: NSObject, NSMenuDelegate {
             DispatchQueue.main.async {
                 guard let self = self, let path = filePath else { return }
                 self.clipboard.copyToClipboard(path)
+                self.lastCapturedPath = path
+                self.showLastCaptureItem?.isEnabled = true
                 self.showNotification(path: path)
             }
         }
     }
 
+    /// Posts a capture-complete notification with the "Show in Finder" action.
     private func showNotification(path: String) {
         let filename = (path as NSString).lastPathComponent
-        showNotification(message: "Saved \(filename) — path copied to clipboard")
+        let content = UNMutableNotificationContent()
+        content.title = "SnapPath"
+        content.body = "Saved \(filename) — path copied to clipboard"
+        content.sound = .default
+        content.categoryIdentifier = "CAPTURE_COMPLETE"
+        content.userInfo = ["filePath": path]
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                NSLog("SnapPath: Failed to deliver notification: \(error)")
+            }
+        }
     }
 
-    /// Displays a general notification message via NSLog.
+    /// Posts a general informational notification (no Finder action).
     private func showNotification(message: String) {
-        NSLog("SnapPath: \(message)")
+        let content = UNMutableNotificationContent()
+        content.title = "SnapPath"
+        content.body = message
+        content.sound = .default
+
+        let request = UNNotificationRequest(
+            identifier: UUID().uuidString,
+            content: content,
+            trigger: nil
+        )
+        UNUserNotificationCenter.current().add(request) { error in
+            if let error = error {
+                NSLog("SnapPath: Failed to deliver notification: \(error)")
+            }
+        }
     }
 
     /// Opens NSOpenPanel for multi-selecting image files, then copies
@@ -238,6 +284,12 @@ public class StatusBarController: NSObject, NSMenuDelegate {
     @objc private func openSaveFolder() {
         let url = URL(fileURLWithPath: preferences.saveDirectory)
         NSWorkspace.shared.open(url)
+    }
+
+    /// Reveals the most recently captured file in Finder.
+    @objc private func showLastCaptureInFinder() {
+        guard let path = lastCapturedPath else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
     }
 
     @objc private func changeSaveDirectory() {
